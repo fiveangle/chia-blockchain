@@ -1,5 +1,4 @@
 import asyncio
-import sys
 import time
 from datetime import datetime
 from decimal import Decimal
@@ -19,15 +18,31 @@ from chia.wallet.transaction_record import TransactionRecord
 from chia.wallet.util.wallet_types import WalletType
 
 
+def exp_to_dec(f):
+    float_string = repr(f)
+    if "e" in float_string:  # detect scientific notation
+        digits, exp = float_string.split("e")
+        digits = digits.replace(".", "").replace("-", "")
+        exp = int(exp)
+        zero_padding = "0" * (abs(int(exp)) - 1)  # minus 1 for decimal point in the sci notation
+        sign = "-" if f < 0 else ""
+        if exp > 0:
+            float_string = "{}{}{}.0".format(sign, digits, zero_padding)
+        else:
+            float_string = "{}0.{}{}".format(sign, zero_padding, digits)
+        return float_string
+    return str(f)
+
+
 def print_transaction(tx: TransactionRecord, verbose: bool, name) -> None:
     if verbose:
         print(tx)
     else:
-        chia_amount = Decimal(int(tx.amount)) / units["chia"]
+        chia_amount = (int(tx.amount)) / units["chia"]
         to_address = encode_puzzle_hash(tx.to_puzzle_hash, name)
         print(f"Transaction {tx.name}")
         print(f"Status: {'Confirmed' if tx.confirmed else ('In mempool' if tx.is_in_mempool() else 'Pending')}")
-        print(f"Amount: {chia_amount} {name}")
+        print(f"Amount: {exp_to_dec(chia_amount)} {name}")
         print(f"To address: {to_address}")
         print("Created at:", datetime.fromtimestamp(tx.created_at_time).strftime("%Y-%m-%d %H:%M:%S"))
         print("")
@@ -51,21 +66,11 @@ async def get_transactions(args: dict, wallet_client: WalletRpcClient, fingerpri
         print("There are no transactions to this address")
 
     offset = args["offset"]
-    num_per_screen = 5
-    for i in range(offset, len(txs), num_per_screen):
-        for j in range(0, num_per_screen):
-            if i + j >= len(txs):
-                break
-            print_transaction(txs[i + j], verbose=(args["verbose"] > 0), name=name)
-        if i + num_per_screen >= len(txs):
-            return None
-        print("Press q to quit, or c to continue")
-        while True:
-            entered_key = sys.stdin.read(1)
-            if entered_key == "q":
-                return None
-            elif entered_key == "c":
-                break
+
+    for i in range(offset, len(txs)):
+        if i >= len(txs):
+            break
+        print_transaction(txs[i], verbose=(args["verbose"] > 0), name=name)
 
 
 def check_unusual_transaction(amount: Decimal, fee: Decimal):
@@ -124,7 +129,7 @@ def wallet_coin_unit(typ: WalletType, address_prefix: str) -> Tuple[str, int]:
 
 
 def print_balance(amount: int, scale: int, address_prefix: str) -> str:
-    ret = f"{amount/scale} {address_prefix} "
+    ret = f"{exp_to_dec(amount/scale)} {address_prefix} "
     if scale > 1:
         ret += f"({amount} mojo)"
     return ret
